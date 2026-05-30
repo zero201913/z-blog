@@ -47,17 +47,9 @@ trigger_keywords:
     }
 </style>
 <button class="btn-outline">了解更多</button>
-
-帮我深度优化skills,用于开发此类风格的网页组件，要求绝对覆盖所有样式开发的场景，字数不少于5000字
-
----
-
-# deepseek response
-
-# 前端标准化 UI 组件开发设计规范 v2.0
+```
 
 ## 1. 核心理念与目标
-本规范旨在建立一套可维护、可扩展、高复用的前端组件开发体系。无论使用原生 HTML/CSS/JS，还是 React、Vue 等框架，均需遵循以下原则：
 - **视觉一致性**：所有组件在颜色、间距、字体、圆角等方面使用统一的设计令牌（Design Tokens）。
 - **交互完整性**：每个可交互元素必须覆盖 `default`、`hover`、`active`、`focus`、`disabled` 等全部状态，并提供流畅过渡动画。
 - **样式隔离性**：杜绝全局污染，强制使用 CSS Modules、Scoped CSS 或严格 BEM 命名。

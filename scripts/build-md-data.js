@@ -185,6 +185,8 @@ function parseArticleMd(filePath) {
           case '推荐': article.isFeatured = value === '是'; break
           case 'emoji': article.emoji = value; break
           case '标签': article.tags = value.split(/[,，]\s*/).map(t => t.trim()).filter(Boolean); break
+          case '锁定': article.locked = value === '是'; break
+          case '密码': article.lockPassword = value; break
         }
         continue
       }
@@ -206,6 +208,14 @@ function parseArticleMd(filePath) {
 
   if (!article.tags) {
     article.tags = []
+  }
+
+  if (article.locked === undefined) {
+    article.locked = false
+  }
+
+  if (!article.lockPassword && article.locked) {
+    article.lockPassword = 'blog2026'
   }
 
   const parentDir = path.basename(path.dirname(filePath))

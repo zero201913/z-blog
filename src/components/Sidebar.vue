@@ -1,22 +1,50 @@
 <template>
   <aside class="sidebar">
     <div class="sidebar__section">
-      <h3 class="sidebar__title">关于作者</h3>
-      <p class="sidebar__desc">
-        MyBlog 是一个专注于优质内容阅读的平台，汇聚各领域优秀作者。
+      <h3 class="sidebar__title">每日一言</h3>
+      <p v-if="saying" class="sidebar__saying">
+        “{{ saying.text }}”
+      </p>
+      <p v-else-if="sayingLoading" class="sidebar__saying sidebar__saying--loading">
+        获取中...
       </p>
     </div>
 
     <div class="sidebar__section">
       <h3 class="sidebar__title">热门标签</h3>
       <div class="sidebar__tags">
+        <span class="tag tag--all" @click="navigateToAll">全部</span>
         <span v-for="tag in tags" :key="tag" class="tag">{{ tag }}</span>
+      </div>
+    </div>
+
+    <div class="sidebar__section sidebar__location">
+      <h3 class="sidebar__title">我的位置</h3>
+      <div v-if="ipInfo" class="location">
+        <div class="location__item">
+          <span class="location__icon">🌐</span>
+          <span class="location__label">IP 地址</span>
+          <span class="location__value">{{ ipInfo.ip }}</span>
+        </div>
+        <div class="location__item">
+          <span class="location__icon">📍</span>
+          <span class="location__label">位置</span>
+          <span class="location__value">{{ ipInfo.region }}</span>
+        </div>
+        <div class="location__item">
+          <span class="location__icon">🏢</span>
+          <span class="location__label">运营商</span>
+          <span class="location__value">{{ ipInfo.isp }}</span>
+        </div>
+      </div>
+      <div v-else-if="ipLoading" class="location location--loading">
+        <span>检测位置中...</span>
       </div>
     </div>
 
     <div class="sidebar__section sidebar__weather">
       <h3 class="sidebar__title">
-        今日天气 · {{ weather?.city || '' }}
+        今日天气 · {{ weather?.city || (ipInfo ? extractCity(ipInfo.region) : '') }}
       </h3>
       <div v-if="weather" class="weather">
         <div class="weather__main">
@@ -81,10 +109,10 @@
           </div>
         </div>
       </div>
-      <div v-else-if="loading" class="weather weather--loading">
+      <div v-else-if="weatherLoading" class="weather weather--loading">
         <span>加载天气中...</span>
       </div>
-      <div v-else-if="error" class="weather weather--error">
+      <div v-else-if="weatherError" class="weather weather--error">
         <span>天气获取失败</span>
       </div>
     </div>
@@ -93,13 +121,53 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { mockData } from '../data/index.js'
+
+const router = useRouter()
 
 const tags = mockData.tags
 
+function navigateToAll() {
+  router.push('/all')
+}
+
+const ipInfo = ref(null)
+const ipLoading = ref(false)
+
 const weather = ref(null)
-const loading = ref(false)
-const error = ref(false)
+const weatherLoading = ref(false)
+const weatherError = ref(false)
+
+const saying = ref(null)
+const sayingLoading = ref(false)
+
+function getTodayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function loadFromCache(key) {
+  try {
+    const cacheStr = localStorage.getItem(`sidebar_cache_${key}`)
+    const dateStr = localStorage.getItem(`sidebar_cache_${key}_date`)
+    if (cacheStr && dateStr === getTodayStr()) {
+      return JSON.parse(cacheStr)
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+function saveToCache(key, data) {
+  try {
+    localStorage.setItem(`sidebar_cache_${key}`, JSON.stringify(data))
+    localStorage.setItem(`sidebar_cache_${key}_date`, getTodayStr())
+  } catch {
+    /* ignore */
+  }
+}
 
 const weatherEmojiMap = {
   '晴': '☀️',
@@ -157,29 +225,111 @@ function forecastEmoji(day) {
   return '🌈'
 }
 
-async function fetchWeather() {
-  loading.value = true
-  error.value = false
+function extractCity(region) {
+  if (!region) return ''
+  const parts = region.split(' ')
+  const last = parts[parts.length - 1] || ''
+  return last.replace(/[市县]$/, '')
+}
+
+async function fetchIpInfo() {
+  const cached = loadFromCache('ip')
+  if (cached) {
+    ipInfo.value = cached
+    return cached
+  }
+
+  ipLoading.value = true
   try {
-    const res = await fetch('/api/v1/misc/weather?city=上海&lang=zh&extended=true&forecast=true')
-    if (!res.ok) throw new Error('Weather fetch failed')
+    const res = await fetch('/api/v1/network/myip')
+    if (!res.ok) throw new Error('IP fetch failed')
     const data = await res.json()
-    weather.value = data
+    ipInfo.value = data
+    saveToCache('ip', data)
+    return data
   } catch {
-    error.value = true
+    return null
   } finally {
-    loading.value = false
+    ipLoading.value = false
   }
 }
 
-onMounted(fetchWeather)
+async function fetchWeather(city) {
+  const cached = loadFromCache('weather')
+  if (cached) {
+    weather.value = cached
+    return
+  }
+
+  weatherLoading.value = true
+  weatherError.value = false
+  try {
+    const cityName = city || '上海'
+    const res = await fetch(`/api/v1/misc/weather?city=${encodeURIComponent(cityName)}&lang=zh&extended=true&forecast=true`)
+    if (!res.ok) throw new Error('Weather fetch failed')
+    const data = await res.json()
+    weather.value = data
+    saveToCache('weather', data)
+  } catch {
+    weatherError.value = true
+  } finally {
+    weatherLoading.value = false
+  }
+}
+
+async function fetchSaying() {
+  const cached = loadFromCache('saying')
+  if (cached) {
+    saying.value = cached
+    return
+  }
+
+  sayingLoading.value = true
+  try {
+    const res = await fetch('/api/v1/saying')
+    if (!res.ok) throw new Error('Saying fetch failed')
+    const data = await res.json()
+    saying.value = data
+    saveToCache('saying', data)
+  } catch {
+    /* ignore */
+  } finally {
+    sayingLoading.value = false
+  }
+}
+
+async function init() {
+  fetchSaying()
+  const ipData = await fetchIpInfo()
+  const city = ipData ? extractCity(ipData.region) : '上海'
+  fetchWeather(city)
+}
+
+onMounted(init)
 </script>
 
 <style scoped>
-.sidebar__desc {
+.sidebar__saying {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: var(--line-height-relaxed);
+  font-style: italic;
+}
+
+.sidebar__saying--loading {
+  color: var(--color-text-muted);
+  font-style: normal;
+}
+
+.tag--all {
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tag--all:hover {
+  background-color: var(--color-primary-hover);
+  color: var(--color-text-on-primary);
 }
 
 .weather {
@@ -329,5 +479,44 @@ onMounted(fetchWeather)
 
 .weather__forecast-low {
   color: var(--color-text-muted);
+}
+
+.location {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.location--loading {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-2) 0;
+}
+
+.location__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.location__icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.location__label {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  min-width: 48px;
+}
+
+.location__value {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

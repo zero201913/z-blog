@@ -73,6 +73,13 @@
       <h3>文章不存在</h3>
       <base-button variant="solid" style="margin-top: var(--space-4);" @click="goBack">返回首页</base-button>
     </div>
+
+    <lock-modal
+      :visible="showLockModal"
+      :article="article || {}"
+      @close="handleLockCancel"
+      @unlock="handleUnlock"
+    />
   </div>
 </template>
 
@@ -80,20 +87,37 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { mockData } from '../data/index.js'
+import { store } from '../store/index.js'
 import ArticleCard from '../components/ArticleCard.vue'
+import LockModal from '../components/LockModal.vue'
 
 const route = useRoute()
 const router = useRouter()
 const article = ref(null)
 const relatedArticles = ref([])
 const scrollProgress = ref(0)
+const showLockModal = ref(false)
 
 function loadArticle() {
   article.value = mockData.getArticleById(route.params.id)
   if (article.value) {
     relatedArticles.value = mockData.getRelatedArticles(article.value.id)
     window.scrollTo(0, 0)
+
+    if (article.value.locked && !store.isArticleUnlocked(article.value.id)) {
+      showLockModal.value = true
+    }
   }
+}
+
+function handleLockCancel() {
+  showLockModal.value = false
+  router.push('/')
+}
+
+function handleUnlock(id) {
+  store.unlockArticle(id)
+  showLockModal.value = false
 }
 
 watch(

@@ -5,6 +5,15 @@ const defaultHue = 340
 export const store = reactive({
   darkMode: localStorage.getItem('dark-mode') === 'true',
   hue: parseInt(localStorage.getItem('theme-hue'), 10) || defaultHue,
+  unlockedArticles: new Set(),
+
+  unlockArticle(id) {
+    this.unlockedArticles.add(id)
+  },
+
+  isArticleUnlocked(id) {
+    return this.unlockedArticles.has(id)
+  },
 
   setHue(value) {
     this.hue = value
